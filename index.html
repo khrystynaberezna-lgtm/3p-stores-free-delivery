@@ -48,7 +48,10 @@ label.partner { position:relative; }
 .picked span { color:var(--muted); font-weight:500; }
 .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:14px 0; }
 .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
-.kpi .l { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+.kpi .l { display:flex; align-items:center; justify-content:space-between; gap:6px; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+h2, h3, .mh { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.kpi .l .info, h2 .info, h3 .info, .mh .info, .barline .info, .pair .row .info { text-transform:none; letter-spacing:0; }
+.barline > span { display:inline-flex; align-items:center; gap:4px; }
 .kpi .v { font-size:22px; font-weight:750; margin-top:2px; font-variant-numeric:tabular-nums; }
 .kpi .s { color:var(--muted); font-size:12px; margin-top:2px; }
 .kpi.lead { background:#e9f9f1; border-color:#b7ebcf; }
@@ -61,7 +64,8 @@ h2 { margin:0 0 4px; font-size:16px; }
 .legend { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:8px; font-size:12px; color:var(--muted); }
 .legend b { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; vertical-align:middle; }
 .pair { display:grid; gap:8px; }
-.pair .row { display:grid; grid-template-columns:92px 1fr 64px; gap:8px; align-items:center; font-size:12px; }
+.pair .row { display:grid; grid-template-columns:118px 1fr 64px; gap:8px; align-items:center; font-size:12px; }
+.pair .row > span { display:inline-flex; align-items:center; gap:4px; }
 .months { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .mcard { border:1px solid var(--line); border-radius:10px; padding:10px; }
 .mcard .mh { font-weight:700; margin-bottom:6px; }
@@ -167,7 +171,7 @@ footer ul { margin:8px 0 0; padding-left:18px; }
   <div class="kpis" id="kpis"></div>
 
   <section>
-    <h2>Промо проти без промо</h2>
+    <h2 id="cmpTitle">Промо проти без промо</h2>
     <p class="sub" id="cmpSub"></p>
     <div class="cmp" id="cmp"></div>
   </section>
@@ -180,7 +184,7 @@ footer ul { margin:8px 0 0; padding-left:18px; }
       <div class="legend" id="legend"></div>
     </section>
     <section>
-      <h2>Чек по місяцях</h2>
+      <h2 id="monthTitle">Чек по місяцях</h2>
       <p class="sub">Зелений — промо, сірий — доставка без знижки. Усі фільтри, крім місяця, діють і тут; обраний місяць підсвічено. Жовтень лише 1–15.</p>
       <div class="months" id="months"></div>
     </section>
@@ -413,51 +417,54 @@ function render(){
   document.getElementById("picked").innerHTML = `<b>${esc(title)}</b><span>${esc(single ? ctx : fmt(names.length) + " " + partnersWord(names.length) + " · " + ctx)}</span>`;
 
   const cards = [
-    ["Сер. чек", money(port.aov), fmt(port.orders) + " замовлень · " + who],
-    ["Сер. дистанція", km(port.dist), "магазин → клієнт, без розрізу кошика"],
-    ["Чек промо", money(port.aovPromo), lift == null ? "немає замовлень для порівняння" : (lift>=0?"+":"") + pct(lift) + " проти доставки без знижки"],
-    ["Чек без знижки", money(port.aovPaid), fmt(port.paidOrders) + " замовлень"],
-    ["Частка промо", pct(port.share), fmt(port.promoOrders) + " промо · Bolt Plus " + fmt(port.plusOrders)],
+    ["aov", "Сер. чек", money(port.aov), fmt(port.orders) + " замовлень · " + who, false],
+    ["dist", "Сер. дистанція", km(port.dist), "магазин → клієнт, без розрізу кошика", false],
+    ["aovP", "Чек промо", money(port.aovPromo), lift == null ? "немає замовлень для порівняння" : (lift>=0?"+":"") + pct(lift) + " проти доставки без знижки", true],
+    ["aovO", "Чек без знижки", money(port.aovPaid), fmt(port.paidOrders) + " замовлень", false],
+    ["share", "Частка промо", pct(port.share), fmt(port.promoOrders) + " промо · Bolt Plus " + fmt(port.plusOrders), false],
     thresholdOn()
-      ? ["Промо ≥ " + state.thr + " ₴", pct(port.pass), "частка промо-замовлень від порогу"]
-      : ["Поріг кошика", "Вимкнено", "у розрахунку всі кошики"],
-    ["Конверсія з промо", pct(port.convOn), "дні, коли промо спрацювало"],
-    ["Конверсія без промо", pct(port.convOff), "дні без такого замовлення"],
-    ["Повтор з промо", pct(port.repOn), port.freqOn == null ? "—" : num2(port.freqOn) + " замовлень на клієнта"],
-    ["Повтор без промо", pct(port.repOff), port.freqOff == null ? "—" : num2(port.freqOff) + " замовлень на клієнта"]
+      ? ["pass", "Промо ≥ " + state.thr + " ₴", pct(port.pass), "частка промо-замовлень від порогу", false]
+      : ["thrOff", "Поріг кошика", "Вимкнено", "у розрахунку всі кошики", false],
+    ["convOn", "Конверсія з промо", pct(port.convOn), "дні, коли промо спрацювало", false],
+    ["convOff", "Конверсія без промо", pct(port.convOff), "дні без такого замовлення", false],
+    ["repOn", "Повтор з промо", pct(port.repOn), port.freqOn == null ? "—" : num2(port.freqOn) + " замовлень на клієнта", false],
+    ["repOff", "Повтор без промо", pct(port.repOff), port.freqOff == null ? "—" : num2(port.freqOff) + " замовлень на клієнта", false]
   ];
-  document.getElementById("kpis").innerHTML = cards.map((k,i)=>`<div class="kpi${i===1?" lead":""}"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join("");
+  document.getElementById("kpis").innerHTML = cards.map(k=>`<div class="kpi${k[4]?" lead":""}"><div class="l"><span>${k[1]}</span>${infoBtn(k[0], k[1])}</div><div class="v">${k[2]}</div><div class="s">${k[3]}</div></div>`).join("");
 
   const bars = (pairs) => {
     const max = Math.max(...pairs.map(p => p[1] || 0), 0.001);
-    return pairs.map(([label, val, note, paid]) => `<div class="barline"><span style="width:88px">${label}</span><div class="track"><div class="fill${paid?" paid":""}" style="width:${((val||0)/max)*100}%"></div></div><b>${pct(val)}</b></div><div class="note" style="margin:0 0 8px 96px">${note}</div>`).join("");
+    return pairs.map(([label, val, note, paid, tip]) => `<div class="barline"><span style="width:108px">${label}${infoBtn(tip, label)}</span><div class="track"><div class="fill${paid?" paid":""}" style="width:${((val||0)/max)*100}%"></div></div><b>${pct(val)}</b></div><div class="note" style="margin:0 0 8px 116px">${note}</div>`).join("");
   };
+  document.getElementById("cmpTitle").innerHTML = `Промо проти без промо${infoBtn("cmp","Промо проти без промо")}`;
   document.getElementById("cmpSub").textContent = title + " · " + ctx + ". Конверсія: перегляд → замовлення в дні з промо і в дні без нього. Повторюваність: клієнти з 2+ замовленнями всередині сегмента за обраний період.";
   document.getElementById("cmp").innerHTML = `
-    <div><h3>Конверсія магазину</h3>
-      ${bars([["З промо", port.convOn, fmt(port.oon) + " замовлень із " + fmt(port.von) + " переглядів", false],["Без промо", port.convOff, fmt(port.ooff) + " замовлень із " + fmt(port.voff) + " переглядів", true]])}
+    <div><h3>Конверсія магазину${infoBtn("convOn","Конверсія магазину")}</h3>
+      ${bars([["З промо", port.convOn, fmt(port.oon) + " замовлень із " + fmt(port.von) + " переглядів", false, "convOn"],["Без промо", port.convOff, fmt(port.ooff) + " замовлень із " + fmt(port.voff) + " переглядів", true, "convOff"]])}
     </div>
-    <div><h3>Повторюваність замовлення</h3>
-      ${bars([["З промо", port.repOn, fmt(port.rp.rep) + " із " + fmt(port.rp.u) + " клієнтів · " + num2(port.freqOn) + " замовлень на клієнта", false],["Без промо", port.repOff, fmt(port.rq.rep) + " із " + fmt(port.rq.u) + " клієнтів · " + num2(port.freqOff) + " замовлень на клієнта", true]])}
+    <div><h3>Повторюваність замовлення${infoBtn("repOn","Повторюваність замовлення")}</h3>
+      ${bars([["З промо", port.repOn, fmt(port.rp.rep) + " із " + fmt(port.rp.u) + " клієнтів · " + num2(port.freqOn) + " замовлень на клієнта", false, "repOn"],["Без промо", port.repOff, fmt(port.rq.rep) + " із " + fmt(port.rq.u) + " клієнтів · " + num2(port.freqOff) + " замовлень на клієнта", true, "repOff"]])}
     </div>`;
 
-  document.getElementById("mixTitle").textContent = "Розбивка чека — " + title;
+  document.getElementById("mixTitle").innerHTML = "Розбивка чека — " + esc(title) + infoBtn("mix","Розбивка чека");
   document.getElementById("mixSub").textContent = "Частка замовлень у кошику, промо проти доставки без знижки · " + ctx + ".";
   document.getElementById("mix").innerHTML = [["Промо", port.binsPromo], ["Без знижки", port.binsPaid]].map(([label, bins]) => {
     const total = bins.reduce((a,b)=>a+b,0);
     const widths = bins.map(v => total ? v/total*100 : 0);
-    return `<div class="row"><span>${label}</span><div class="stack">${widths.map((w,i)=>`<i title="${BINS[i]}: ${pct(total ? bins[i]/total : 0)}" style="width:${w}%;background:${label==="Промо"?BIN_COLORS[i]:"#c5d0ca"}"></i>`).join("")}</div><b>${fmt(total)}</b></div>`;
+    const tip = label === "Промо" ? "aovP" : "aovO";
+    return `<div class="row"><span>${label}${infoBtn(tip, label)}</span><div class="stack">${widths.map((w,i)=>`<i title="${BINS[i]}: ${pct(total ? bins[i]/total : 0)}" style="width:${w}%;background:${label==="Промо"?BIN_COLORS[i]:"#c5d0ca"}"></i>`).join("")}</div><b>${fmt(total)}</b></div>`;
   }).join("");
   document.getElementById("legend").innerHTML = BINS.map((b,i)=>`<span><b style="background:${BIN_COLORS[i]}"></b>${b}</span>`).join("");
 
+  document.getElementById("monthTitle").innerHTML = `Чек по місяцях${infoBtn("months","Чек по місяцях")}`;
   document.getElementById("months").innerHTML = MONTHS.map(([key,label]) => {
     const snap = metrics(collect(names, () => "all", key).all);
     const p = snap.aovPromo || 0, o = snap.aovPaid || 0;
     const max = Math.max(p, o, 1);
     const on = state.month === key ? " on" : "";
     return `<div class="mcard${on}"><div class="mh">${label}</div>
-      <div class="barline"><span style="width:54px">Промо</span><div class="track"><div class="fill" style="width:${p/max*100}%"></div></div><b>${money(snap.aovPromo)}</b></div>
-      <div class="barline"><span style="width:54px">Без DF</span><div class="track"><div class="fill paid" style="width:${o/max*100}%"></div></div><b>${money(snap.aovPaid)}</b></div>
+      <div class="barline"><span style="width:78px">Промо${infoBtn("aovP","Чек промо")}</span><div class="track"><div class="fill" style="width:${p/max*100}%"></div></div><b>${money(snap.aovPromo)}</b></div>
+      <div class="barline"><span style="width:78px">Без DF${infoBtn("aovO","Чек без знижки")}</span><div class="track"><div class="fill paid" style="width:${o/max*100}%"></div></div><b>${money(snap.aovPaid)}</b></div>
       <div class="note">${pct(snap.share)} промо · ${km(snap.dist)} · конв. ${pct(snap.convOn)} / ${pct(snap.convOff)} · повтор ${pct(snap.repOn)} / ${pct(snap.repOff)}</div></div>`;
   }).join("");
 
@@ -485,7 +492,11 @@ const TIPS = {
   adds: "Скільки з цих переглядів дійшли до додавання товару в кошик. Це не кількість товарів і не кількість людей, а перегляди, у яких товар додали.",
   srcOrders: "Скільки з цих переглядів завершились оформленим замовленням. Замовлення тут прив’язане до перегляду закладу, тому цифра не збігається з колонкою «Замовлення» в таблиці партнерів: там усі доставлені замовлення, тут лише ті, що пішли з конкретного джерела.",
   srcConv: "Частка переглядів з цього джерела, які закінчились замовленням. Наприклад, 25% означає, що замовлення було в 25 зі 100 відкриттів закладу з цього джерела.",
-  srcShare: "Яку частку всіх переглядів у поточному фільтрі дало це джерело. Сума часток по джерелах дорівнює 100%."
+  srcShare: "Яку частку всіх переглядів у поточному фільтрі дало це джерело. Сума часток по джерелах дорівнює 100%.",
+  thrOff: "Поріг кошика вимкнено, тож окрема частка «промо-замовлення від N гривень» не рахується. Усі чеки лишаються в середньому чеку, конверсії, дистанції і повторюваності. Розбивка на діапазони кошика нижче все одно показується.",
+  cmp: "Порівняння обраного промо із замовленнями, де доставку не знижували. Ліворуч — конверсія магазину, праворуч — повторюваність клієнтів. Обидва блоки рахуються за обраних партнера, тип, сегмент, місто і місяць. Bolt Plus ні в «з промо», ні в «без промо» не входить.",
+  mix: "Як замовлення розкладені за розміром чека. Верхня смуга — замовлення обраного промо, нижня — замовлення без знижки на доставку. Колір зліва направо: до 200, 200–349, 350–499, 500–649, 650–799, 800–999, 1000–1499 і 1500+ гривень. Ширина кольору — частка замовлень цього діапазону, число справа — скільки їх у смузі. Поріг кошика ці смуги не обрізає.",
+  months: "Серпень, вересень і 1–15 жовтня. Партнер, тип, сегмент і місто змінюють цифри всередині карток, а вибраний місяць їх не ховає: він лише підсвічує свою картку. Зелений стовпчик — середній чек промо, сірий — чек без знижки на доставку. Під ними за цей місяць: частка промо, середня дистанція, конверсія з промо і без, повторюваність з промо і без."
 };
 function tipFor(key){
   if (key === "pass") return "Серед промо-замовлень — яка частка мала чек товарів від " + state.thr + " ₴ і вище. Поріг не відсікає інші колонки: замовлення, чек, дистанція, конверсія і повторюваність далі рахуються по всіх кошиках. Якщо вгорі обрати «Не враховувати», цієї колонки немає.";

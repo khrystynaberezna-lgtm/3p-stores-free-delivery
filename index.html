@@ -96,6 +96,20 @@ tr.on td { background:#e9f9f1; }
 .src-head { display:flex; justify-content:space-between; gap:12px; align-items:end; }
 .src table { min-width:720px; }
 .src .barline { min-width:160px; }
+.th-in { display:inline-flex; align-items:center; gap:4px; }
+.info {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:15px; height:15px; border-radius:50%; border:1px solid #b7c4bc;
+  background:#fff; color:var(--muted); font-size:10px; font-weight:750; line-height:1;
+  padding:0; cursor:help; flex:0 0 auto;
+}
+.info:hover, .info:focus { color:var(--gd); border-color:var(--g); outline:none; }
+#tip {
+  position:fixed; z-index:40; max-width:340px; display:none;
+  background:#122018; color:#f4faf6; font-size:12.5px; font-weight:500; letter-spacing:0;
+  text-transform:none; line-height:1.45; text-align:left; padding:10px 12px; border-radius:10px;
+  box-shadow:0 10px 28px rgba(18,32,24,.28);
+}
 footer { color:var(--muted); font-size:12px; }
 footer ul { margin:8px 0 0; padding-left:18px; }
 @media (max-width:980px) {
@@ -451,6 +465,42 @@ function render(){
   renderTable(names, per, single);
 }
 
+const TIPS = {
+  name: "Партнер 3P Stores. Поруч сірим зазначено тип мерчанта, наприклад grocery або alcohol. Клік по рядку залишає на всьому дашборді лише цього партнера. Повторний клік або «Скинути вибір» повертає всіх партнерів у поточних фільтрах.",
+  city: "Місто магазину, а не місто, з якого замовляв клієнт. Якщо партнер зверху не обраний, рядок збирає всіх партнерів цього міста, які проходять тип, сегмент і мінімум замовлень. У таблиці лишаються міста зі щонайменше 15 замовленнями.",
+  partner: "Чиї замовлення згорнуті в цьому місті. Якщо вгорі обраний конкретний партнер, тут його назва. Якщо ні — «Усі у фільтрі»: зведена цифра по всіх партнерах цього міста в поточних фільтрах.",
+  orders: "Скільки замовлень доставлено (статус delivered) за обрані тип, сегмент, місто і місяць. У кількість входять усі варіанти: безкоштовна доставка, часткова знижка, доставка без знижки і Bolt Plus. Перемикач «Промо» цю колонку не змінює.",
+  aov: "Середній чек цих замовлень у гривнях. Чек — вартість товарів мерчанта до знижки, без ціни доставки і без сервісного збору. Це сума чеків, поділена на кількість замовлень, а не середнє середніх по магазинах.",
+  dist: "Середня довжина шляху кур’єра від магазину до клієнта, у кілометрах. Береться по всіх доставлених замовленнях рядка за обрані місто і місяць. Промо і поріг кошика цифру не змінюють. Замовлення без дистанції або з дистанцією понад 50 км у середнє не входять.",
+  aovP: "Середній чек лише замовлень обраного промо. «Лише безкоштовна доставка» — доставка до знижки коштувала більше нуля, після знижки стала 0, і це не Bolt Plus. «FFD + часткова знижка DF» додає замовлення, де доставка стала дешевшою, але не безкоштовною.",
+  aovO: "Середній чек замовлень, у яких ціну доставки не знижували. Bolt Plus сюди не входить: це окремий тип, він не змішується ні з промо, ні з доставкою без знижки.",
+  lift: "На скільки гривень середній чек з промо вищий або нижчий за чек без знижки на доставку. Плюс означає, що з промо кошик більший. Це різниця двох середніх, а не середня різниця в кожному замовленні.",
+  share: "Яка частка всіх доставлених замовлень рядка пройшла з обраним промо. 30% означає, що 30 зі 100 замовлень були з безкоштовною доставкою або з безкоштовною плюс частковою знижкою — залежно від перемикача «Промо».",
+  convOn: "Конверсія в дні, коли промо спрацювало. День є промо-днем, якщо в магазині було хоча б одне доставлене замовлення з обраним промо. Конверсія — сесії, де заклад переглянули і зробили замовлення, поділені на всі сесії з переглядом у такі дні. Промо-день уже містить замовлення, тому цифра вища частково через сам відбір днів. Місяць і місто враховуються.",
+  convOff: "Та сама конверсія «перегляд закладу → замовлення», але в дні, коли в магазині не було жодного замовлення з обраним промо. Це база, з якою порівнюється конверсія в промо-дні.",
+  repOn: "Частка клієнтів промо, які зробили два і більше доставлених замовлень усередині цього промо. Якщо місяць не обраний — за 1 серпня – 15 жовтня, інакше лише за обраний місяць. Клієнт може одночасно бути і тут, і в колонці «без промо». Замовлення в різних містах або в різних партнерів рахуються в кожному рядку окремо.",
+  repOff: "Те саме для замовлень без знижки на доставку: частка клієнтів із двома і більше такими замовленнями за обраний період. Bolt Plus і промо-замовлення сюди не входять.",
+  src: "Звідки в застосунку клієнт відкрив заклад: категорія, головна стрічка, пошук, банер, історія замовлень, ярлик чи діплінк. Веб-сесії не входять. Це той самий розріз, що Provider Viewed Source у Looker.",
+  views: "Скільки разів з цього джерела відкрили сторінку закладу. Один клієнт може дати кілька переглядів. Рахується за обрані партнера, місто і місяць, лише в застосунку.",
+  adds: "Скільки з цих переглядів дійшли до додавання товару в кошик. Це не кількість товарів і не кількість людей, а перегляди, у яких товар додали.",
+  srcOrders: "Скільки з цих переглядів завершились оформленим замовленням. Замовлення тут прив’язане до перегляду закладу, тому цифра не збігається з колонкою «Замовлення» в таблиці партнерів: там усі доставлені замовлення, тут лише ті, що пішли з конкретного джерела.",
+  srcConv: "Частка переглядів з цього джерела, які закінчились замовленням. Наприклад, 25% означає, що замовлення було в 25 зі 100 відкриттів закладу з цього джерела.",
+  srcShare: "Яку частку всіх переглядів у поточному фільтрі дало це джерело. Сума часток по джерелах дорівнює 100%."
+};
+function tipFor(key){
+  if (key === "pass") return "Серед промо-замовлень — яка частка мала чек товарів від " + state.thr + " ₴ і вище. Поріг не відсікає інші колонки: замовлення, чек, дистанція, конверсія і повторюваність далі рахуються по всіх кошиках. Якщо вгорі обрати «Не враховувати», цієї колонки немає.";
+  return TIPS[key] || "";
+}
+function infoBtn(key, label){
+  const text = tipFor(key);
+  if (!text) return "";
+  return `<button type="button" class="info" data-tip="${esc(text)}" aria-label="Що означає: ${esc(label)}">i</button>`;
+}
+function headCell(key, label, align){
+  const arrow = state.sort === key ? (state.dir === "desc" ? " ↓" : " ↑") : "";
+  return `<th class="${align||""}" data-k="${key}"><span class="th-in">${label}${arrow}${infoBtn(key, label)}</span></th>`;
+}
+
 function renderSources(port, who, ctx){
   const rows = Object.entries(port.src).map(([source, s]) => ({source, ...s})).sort((a,b) => b.v - a.v);
   const views = rows.reduce((sum, r) => sum + r.v, 0);
@@ -461,7 +511,7 @@ function renderSources(port, who, ctx){
   }
   const max = Math.max(...rows.map(r => r.v), 1);
   document.getElementById("sources").innerHTML = `<table><thead><tr>
-      <th class="left">Джерело</th><th>Перегляди</th><th>Додали товар</th><th>Замовлення</th><th>Конверсія</th><th class="left">Частка переглядів</th>
+      ${headCell("src","Джерело","left")}${headCell("views","Перегляди")}${headCell("adds","Додали товар")}${headCell("srcOrders","Замовлення")}${headCell("srcConv","Конверсія")}${headCell("srcShare","Частка переглядів","left")}
     </tr></thead><tbody>` + rows.map(r => `<tr><td class="left">${esc(SRC_LABEL[r.source] || r.source)}</td>
         <td>${fmt(r.v)}</td><td>${fmt(r.a)}</td><td>${fmt(r.o)}</td><td>${pct(r.v ? r.o/r.v : null)}</td>
         <td class="left"><div class="barline"><div class="track"><div class="fill" style="width:${(r.v/max)*100}%"></div></div><b>${pct(views ? r.v/views : 0)}</b></div></td></tr>`).join("") + `</tbody></table>`;
@@ -498,7 +548,7 @@ function renderTable(names, per, single){
     ["convOn","Конв. з промо"],["convOff","Конв. без"],["repOn","Повтор з промо"],["repOff","Повтор без"]);
   if (thresholdOn()) head.push(["pass","Промо ≥ " + state.thr]);
 
-  document.getElementById("grid").innerHTML = `<thead><tr>${head.map(([k,l,c])=>`<th class="${c||""}" data-k="${k}">${l}${state.sort===k?(state.dir==="desc"?" ↓":" ↑"):""}</th>`).join("")}</tr></thead><tbody>`
+  document.getElementById("grid").innerHTML = `<thead><tr>${head.map(([k,l,c])=>headCell(k,l,c)).join("")}</tr></thead><tbody>`
     + rows.map(r => {
       const lift = (r.aovPromo||0) - (r.aovPaid||0);
       const first = partnerView
@@ -516,7 +566,8 @@ function renderTable(names, per, single){
     }).join("") + `</tbody>`;
   if (!rows.length) document.getElementById("grid").innerHTML += `<tbody><tr><td class="left" colspan="${head.length}">Немає даних для цих фільтрів.</td></tr></tbody>`;
 
-  document.querySelectorAll("#grid th").forEach(th => th.addEventListener("click", () => {
+  document.querySelectorAll("#grid th").forEach(th => th.addEventListener("click", (event) => {
+    if (event.target.closest(".info")) return;
     const k = th.dataset.k;
     if (state.sort === k) state.dir = state.dir === "desc" ? "asc" : "desc";
     else { state.sort = k; state.dir = k === "name" || k === "city" || k === "partner" ? "asc" : "desc"; }
@@ -597,6 +648,29 @@ document.getElementById("suggest").addEventListener("mousedown", (event) => {
 ["type","seg","city","month","mode","thr","min"].forEach(id => {
   document.getElementById(id).addEventListener("change", () => { readFilters(); render(); });
 });
+const tipBox = document.createElement("div");
+tipBox.id = "tip";
+document.body.appendChild(tipBox);
+function showTip(btn){
+  tipBox.textContent = btn.dataset.tip || "";
+  tipBox.style.display = "block";
+  const rect = btn.getBoundingClientRect();
+  const width = tipBox.offsetWidth;
+  const height = tipBox.offsetHeight;
+  let left = Math.min(rect.left, window.innerWidth - width - 12);
+  left = Math.max(8, left);
+  let top = rect.bottom + 8;
+  if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 8);
+  tipBox.style.left = left + "px";
+  tipBox.style.top = top + "px";
+}
+function hideTip(){ tipBox.style.display = "none"; }
+document.addEventListener("mouseover", (event) => {
+  const btn = event.target.closest(".info");
+  if (btn) showTip(btn); else if (!event.target.closest("#tip")) hideTip();
+});
+document.addEventListener("focusin", (event) => { if (event.target.classList.contains("info")) showTip(event.target); });
+document.addEventListener("focusout", (event) => { if (event.target.classList.contains("info")) hideTip(); });
 document.getElementById("tabP").onclick = () => { state.view = "partners"; state.sort = "orders"; state.dir = "desc"; render(); };
 document.getElementById("tabC").onclick = () => { state.view = "cities"; state.sort = "orders"; state.dir = "desc"; render(); };
 document.getElementById("clearSel").onclick = clearPartner;

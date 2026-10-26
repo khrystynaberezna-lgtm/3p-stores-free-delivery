@@ -108,6 +108,17 @@ tr.on td { background:#e9f9f1; }
   padding:0; cursor:help; flex:0 0 auto;
 }
 .info:hover, .info:focus { color:var(--gd); border-color:var(--g); outline:none; }
+.recs { display:grid; gap:10px; max-height:820px; overflow:auto; }
+.rec { border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#fff; }
+.rec h3 { margin:0 0 4px; font-size:15px; }
+.rec h3 button { border:0; background:transparent; padding:0; font:inherit; font-weight:750; cursor:pointer; color:var(--ink); }
+.why { margin:0 0 10px; color:var(--ink); font-size:13px; }
+.opts { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.opt { border-radius:10px; padding:10px 12px; background:#f6fbf8; border:1px solid var(--line); }
+.opt.check { background:#e9f9f1; border-color:#b7ebcf; }
+.opt .k { font-size:11px; font-weight:750; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+.opt .setup { margin:4px 0; font-size:15px; font-weight:750; }
+.opt p { margin:0; font-size:12.5px; }
 #tip {
   position:fixed; z-index:40; max-width:340px; display:none;
   background:#122018; color:#f4faf6; font-size:12.5px; font-weight:500; letter-spacing:0;
@@ -118,7 +129,7 @@ footer { color:var(--muted); font-size:12px; }
 footer ul { margin:8px 0 0; padding-left:18px; }
 @media (max-width:980px) {
   .kpis { grid-template-columns:repeat(2,1fr); }
-  .layout, .months, .cmp { grid-template-columns:1fr; }
+  .layout, .months, .cmp, .opts { grid-template-columns:1fr; }
   h1 { font-size:22px; }
 }
 </style>
@@ -201,6 +212,12 @@ footer ul { margin:8px 0 0; padding-left:18px; }
   </section>
 
   <section>
+    <h2 id="recTitle">Сетап кампанії на наступний місяць</h2>
+    <p class="sub" id="recSub"></p>
+    <div class="recs" id="recs"></div>
+  </section>
+
+  <section>
     <div class="tabs">
       <button id="tabP" class="on" type="button">Партнери</button>
       <button id="tabC" type="button">Міста</button>
@@ -220,6 +237,7 @@ footer ul { margin:8px 0 0; padding-left:18px; }
       <li>Повторюваність — частка клієнтів із двома і більше замовленнями всередині сегмента (промо або доставка без знижки) за обраний період: місяць або весь 1.08–15.10. Один клієнт може бути в обох сегментах. Клієнт, який замовляв у кількох партнерів чи містах, рахується в кожному. Поруч — скільки замовлень припадає на такого клієнта.</li>
       <li>Усі фільтри зверху — партнер, тип, сегмент, місто, місяць, промо, поріг кошика, мінімум замовлень — діють на весь дашборд: картки, порівняння, розбивку чека, джерела клієнта і таблиці. Поріг «Не враховувати» прибирає зріз «частка замовлень від N гривень».</li>
       <li>Місто — місто магазину. Джерело клієнта — звідки в застосунку відкрили заклад (категорія, стрічка, пошук, банер, історія). Веб-сесії не входять. Це той самий розріз, що Provider Viewed Source на Looker.</li>
+      <li>Рекомендації на наступний місяць — два варіанти порога безкоштовної доставки по кожному партнеру. Поріг обрано з того, яку частку поточних промо-замовлень він уже пропускає. Це напрямок впливу на середній чек і обсяг, а не прогноз конверсії.</li>
       <li>У таблиці міст — міста від 15 замовлень. Джерело: Databricks, main.ng_delivery.</li>
     </ul>
   </footer>
@@ -469,7 +487,72 @@ function render(){
   }).join("");
 
   renderSources(port, who, ctx);
+  renderRecs(names, per);
   renderTable(names, per, single);
+}
+
+function passRate(promo, thr){
+  const i = GE_THR.indexOf(thr);
+  if (i < 0 || !promo.o) return null;
+  return promo.ge[i] / promo.o;
+}
+function nearestThr(aov){
+  const opts = [300,500,600,800,1000];
+  if (aov == null) return 500;
+  return opts.reduce((best, t) => Math.abs(t - aov) < Math.abs(best - aov) ? t : best, opts[0]);
+}
+function pp(a, b){
+  if (a == null || b == null) return null;
+  return (a - b) * 100;
+}
+function renderRecs(names, per){
+  const offer = state.mode === "ffd" ? "Безкоштовна доставка" : "FFD або часткова знижка DF";
+  document.getElementById("recTitle").innerHTML = `Сетап кампанії на наступний місяць${infoBtn("recs","Сетап кампанії")}`;
+  document.getElementById("recSub").textContent = "Два варіанти порога для " + offer.toLowerCase() + " за партнером. Цифри — з поточного фільтра (" + filterSummary() + "). Варіант А тримає середній чек, варіант Б відкриває промо більшій кількості замовлень.";
+  const cards = names.map(name => {
+    const acc = per[name];
+    const m = metrics(acc);
+    const promo = sumCls(acc, promoKeys());
+    const pass = thr => passRate(promo, thr);
+    let checkThr, volumeThr, thin = promo.o < 30;
+    if (thin){
+      checkThr = nearestThr(m.aovPaid);
+      volumeThr = checkThr <= 300 ? 200 : 300;
+    } else {
+      checkThr = [1000,800,600,500].find(t => pass(t) >= 0.3) || 500;
+      volumeThr = [500,300,200].find(t => pass(t) != null && pass(t) >= 0.7 && t < checkThr) || 300;
+    }
+    const gap = m.aovPromo != null && m.aovPaid != null ? m.aovPromo - m.aovPaid : null;
+    const convGap = pp(m.convOn, m.convOff);
+    const repGap = pp(m.repOn, m.repOff);
+    const why = [];
+    if (thin){
+      why.push("Промо-замовлень мало (" + fmt(promo.o) + "), тож це старт кампанії, а не продовження поточної.");
+      if (m.aovPaid != null) why.push("Чек без знижки на доставку — " + money(m.aovPaid) + ".");
+    } else {
+      if (gap != null) why.push("Чек промо " + money(m.aovPromo) + " проти " + money(m.aovPaid) + " без знижки (" + (gap>=0?"+":"") + money(gap) + ").");
+      if (m.share != null) why.push("Промо — " + pct(m.share) + " замовлень (" + fmt(m.promoOrders) + ").");
+    }
+    if (convGap != null) why.push("Конверсія в промо-дні " + pct(m.convOn) + " проти " + pct(m.convOff) + " (" + (convGap>=0?"+":"") + convGap.toLocaleString("uk-UA",{maximumFractionDigits:1}) + " в.п.). Частина розриву виникає тому, що промо-день уже має замовлення.");
+    if (repGap != null) why.push("Повтор з промо " + pct(m.repOn) + " проти " + pct(m.repOff) + " без промо.");
+    const checkWhy = thin
+      ? "Поріг " + checkThr + " ₴ стоїть біля поточного чека без знижки. Безкоштовну доставку отримають більші кошики, тож середній чек з промо має триматись не нижче сьогоднішнього чека без знижки. Замовлень з промо буде менше, ніж при низькому порозі."
+      : "Поріг " + checkThr + " ₴ зараз проходять " + pct(pass(checkThr)) + " промо-замовлень. У кампанію лишаються більші кошики, тому середній чек промо має залишитись високим. Частка промо і кількість промо-замовлень будуть менші, ніж при порозі " + volumeThr + " ₴.";
+    let volumeWhy = thin
+      ? "Поріг " + volumeThr + " ₴ нижчий, тож умову отримає більше замовлень, а середній чек промо буде нижчим. Такий тест краще запустити в одному місті, а не на всю мережу."
+      : "Поріг " + volumeThr + " ₴ зараз проходять " + pct(pass(volumeThr)) + " промо-замовлень. Умова доступніша, промо-замовлень зазвичай більше, а середній чек промо нижчий, бо в нього входять менші кошики.";
+    if (!thin && repGap != null && repGap <= -5) volumeWhy += " Повтор з промо вже нижчий, тож ширша кампанія може додати замовлення, які рідше повторюються.";
+    if (!thin && convGap != null && convGap >= 8) volumeWhy += " Конверсія в промо-дні вища, тож нижчий поріг має шанс додати замовлення. Частину цього розриву дає сам відбір промо-днів.";
+    const type = META[name] ? META[name][1] : "";
+    return `<article class="rec"><h3><button type="button" data-g="${esc(name)}">${esc(name)}</button> <span class="tag">${esc(type)}</span></h3>
+      <p class="why">${why.join(" ")}</p>
+      <div class="opts">
+        <div class="opt check"><div class="k">Варіант А · середній чек</div><div class="setup">${offer} від ${checkThr} ₴</div><p>${checkWhy}</p></div>
+        <div class="opt"><div class="k">Варіант Б · більше замовлень</div><div class="setup">${offer} від ${volumeThr} ₴</div><p>${volumeWhy}</p></div>
+      </div></article>`;
+  }).join("");
+  document.getElementById("recs").innerHTML = cards || `<p class="note">Немає партнерів у цьому фільтрі.</p>`;
+  document.querySelectorAll("#recs button[data-g]").forEach(btn => btn.addEventListener("click", () => choosePartner(btn.dataset.g)));
 }
 
 const TIPS = {
@@ -496,7 +579,8 @@ const TIPS = {
   thrOff: "Поріг кошика вимкнено, тож окрема частка «промо-замовлення від N гривень» не рахується. Усі чеки лишаються в середньому чеку, конверсії, дистанції і повторюваності. Розбивка на діапазони кошика нижче все одно показується.",
   cmp: "Порівняння обраного промо із замовленнями, де доставку не знижували. Ліворуч — конверсія магазину, праворуч — повторюваність клієнтів. Обидва блоки рахуються за обраних партнера, тип, сегмент, місто і місяць. Bolt Plus ні в «з промо», ні в «без промо» не входить.",
   mix: "Як замовлення розкладені за розміром чека. Верхня смуга — замовлення обраного промо, нижня — замовлення без знижки на доставку. Колір зліва направо: до 200, 200–349, 350–499, 500–649, 650–799, 800–999, 1000–1499 і 1500+ гривень. Ширина кольору — частка замовлень цього діапазону, число справа — скільки їх у смузі. Поріг кошика ці смуги не обрізає.",
-  months: "Серпень, вересень і 1–15 жовтня. Партнер, тип, сегмент і місто змінюють цифри всередині карток, а вибраний місяць їх не ховає: він лише підсвічує свою картку. Зелений стовпчик — середній чек промо, сірий — чек без знижки на доставку. Під ними за цей місяць: частка промо, середня дистанція, конверсія з промо і без, повторюваність з промо і без."
+  months: "Серпень, вересень і 1–15 жовтня. Партнер, тип, сегмент і місто змінюють цифри всередині карток, а вибраний місяць їх не ховає: він лише підсвічує свою картку. Зелений стовпчик — середній чек промо, сірий — чек без знижки на доставку. Під ними за цей місяць: частка промо, середня дистанція, конверсія з промо і без, повторюваність з промо і без.",
+  recs: "Два варіанти порога безкоштовної доставки на наступний місяць, окремо для кожного партнера. Варіант А ставить вищий поріг: його вже проходить менша частка промо-замовлень, тож у кампанії лишаються більші кошики і середній чек тримається вище. Варіант Б ставить нижчий поріг: умову отримує більше замовлень, середній чек промо зазвичай нижчий. Пороги взято з фактичного розподілу чеків у поточному фільтрі. Це напрямок впливу, а не прогноз, на скільки зміниться конверсія."
 };
 function tipFor(key){
   if (key === "pass") return "Серед промо-замовлень — яка частка мала чек товарів від " + state.thr + " ₴ і вище. Поріг не відсікає інші колонки: замовлення, чек, дистанція, конверсія і повторюваність далі рахуються по всіх кошиках. Якщо вгорі обрати «Не враховувати», цієї колонки немає.";

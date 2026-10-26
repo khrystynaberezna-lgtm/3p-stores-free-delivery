@@ -4,4 +4,4 @@
 
 **Відкрити звіт:** https://khrystynaberezna-lgtm.github.io/3p-stores-free-delivery/
 
-Період: 1 серпня – 15 жовтня 2026. Лише delivered, Україна.
+Період: 1 серпня – 25 жовтня 2026. Лише delivered, Україна.
